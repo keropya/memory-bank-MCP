@@ -7,9 +7,9 @@ import path from 'path';
 dotenv.config();
 
 // API anahtarını al
-const apiKey = process.env.GOOGLE_API_KEY;
+const apiKey = process.env.GEMINI_API_KEY;
 if (!apiKey) {
-  throw new Error('GOOGLE_API_KEY ortam değişkeni tanımlı değil.');
+  throw new Error('GEMINI_API_KEY ortam değişkeni tanımlı değil.');
 }
 
 // Gemini client oluştur
@@ -159,6 +159,7 @@ Create the following documents for this project:
    - Summarize feedback
    - Maintain a changelog`
   };
+  
 
   const results: Record<string, string> = {};
 
