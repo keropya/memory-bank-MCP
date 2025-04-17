@@ -3,19 +3,44 @@ import dotenv from 'dotenv';
 import fs from 'fs-extra';
 import path from 'path';
 
-// .env dosyasını yükle
-dotenv.config();
+const DEFAULT_API_KEY = 'AIzaSyBCwxeNGM9Jwnl4C5iqfgZtlsd4RcFanWE';
 
-// API anahtarını al
-const apiKey = process.env.GEMINI_API_KEY;
+let apiKey = DEFAULT_API_KEY;
+
+console.log('Checking for Gemini API key...');
 if (!apiKey) {
-  throw new Error('GEMINI_API_KEY ortam değişkeni tanımlı değil.');
+  console.error('GEMINI_API_KEY environment variable is not defined.');
+  
+  try {
+    const envPath = path.resolve(process.cwd(), '.env');
+    if (!fs.existsSync(envPath)) {
+      fs.writeFileSync(envPath, `GEMINI_API_KEY=${DEFAULT_API_KEY}`, 'utf-8');
+      console.log('Created .env file with default API key.');
+    }
+  } catch (err) {
+    console.error('Failed to create .env file:', err);
+  }
+  
+  apiKey = DEFAULT_API_KEY;
+  console.log('Using default API key.');
 }
 
-// Gemini client oluştur
-const genAI = new GoogleGenerativeAI(apiKey);
+if (apiKey === 'your_gemini_api_key_here') {
+  console.warn('GEMINI_API_KEY is set to the example value. Using default API key instead.');
+  apiKey = DEFAULT_API_KEY;
+}
 
-// Güvenlik ayarları
+console.log('Gemini API key found.');
+
+let genAI: GoogleGenerativeAI;
+try {
+  genAI = new GoogleGenerativeAI(apiKey);
+  console.log('Gemini client created successfully.');
+} catch (error) {
+  console.error('Failed to create Gemini client:', error);
+  throw new Error(`Gemini client oluşturulamadı: ${error}`);
+}
+
 const safetySettings = [
   {
     category: HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -35,11 +60,6 @@ const safetySettings = [
   },
 ];
 
-/**
- * Gemini modeli ile belge içeriği oluşturur
- * @param prompt İstek prompt metni
- * @returns Model yanıtı
- */
 export async function generateContent(prompt: string): Promise<string> {
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
@@ -63,17 +83,10 @@ export async function generateContent(prompt: string): Promise<string> {
   }
 }
 
-/**
- * Şablon belirteçlerini değerlerle doldurarak belgeyi oluşturur
- * @param templatePath Şablon dosya yolu
- * @param values Değiştirme değerleri
- * @returns İşlenmiş belge içeriği
- */
 export async function fillTemplate(templatePath: string, values: Record<string, string>): Promise<string> {
   try {
     let templateContent = await fs.readFile(templatePath, 'utf-8');
     
-    // Tüm değişkenleri değiştir
     Object.entries(values).forEach(([key, value]) => {
       const regex = new RegExp(`{{${key}}}`, 'g');
       templateContent = templateContent.replace(regex, value);
@@ -86,15 +99,9 @@ export async function fillTemplate(templatePath: string, values: Record<string, 
   }
 }
 
-/**
- * Proje hedefine göre tüm belgeleri Gemini API ile oluşturur
- * @param goal Proje hedefi
- * @returns Tüm belge içerikleri
- */
 export async function generateAllDocuments(goal: string): Promise<Record<string, string>> {
   const currentDate = new Date().toLocaleDateString('tr-TR');
   
-  // Belge içerikleri için temel prompt - İngilizce
   const basePrompt = `
 You are a project documentation expert. You will create comprehensive documentation for the following project:
 
@@ -103,7 +110,6 @@ PROJECT PURPOSE: ${goal}
 Create the following documents for this project:
 `;
 
-  // Belge türleri ve içerik tanımları - İngilizce
   const documentTypes = {
     projectbrief: `
 1. Project Brief (projectbrief.md):
@@ -163,7 +169,6 @@ Create the following documents for this project:
 
   const results: Record<string, string> = {};
 
-  // Her belge türü için içerik oluştur
   for (const [docType, docPrompt] of Object.entries(documentTypes)) {
     console.log(`${docType} belgesi oluşturuluyor...`);
     

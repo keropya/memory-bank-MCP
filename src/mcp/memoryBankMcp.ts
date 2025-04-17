@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import path from 'path';
 import fs from 'fs-extra';
+import os from 'os';
 import { generateAllDocuments } from '../utils/gemini.js';
 import { 
   createMemoryBankStructure, 
@@ -11,6 +12,7 @@ import {
   readAllDocuments, 
   exportMemoryBank 
 } from '../utils/fileManager.js';
+import { generateCursorRules } from '../utils/cursorRulesGenerator.js';
 
 // Create MCP server
 const server = new McpServer({
@@ -599,6 +601,117 @@ server.tool(
       };
     } catch (error) {
       console.error('Error exporting Memory Bank:', error);
+      return {
+        content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Create Cursor Rules
+server.tool(
+  'create_cursor_rules',
+  {
+    projectPurpose: z.string()
+      .min(10, 'Proje amacı en az 10 karakter olmalıdır')
+      .describe('Proje amacını detaylı bir şekilde açıklayan bir metin giriniz. Bu metin projenin temel hedeflerini ve kapsamını belirleyecektir.'),
+    location: z.string()
+      .describe('Absolute path where cursor-rules will be created')
+  },
+  async ({ projectPurpose, location }) => {
+    try {
+      // Diagnostics: Log environment info
+      console.log(`Current working directory: ${process.cwd()}`);
+      console.log(`Node version: ${process.version}`);
+      console.log(`Platform: ${process.platform}`);
+      
+      // Determine where to create the .cursor directory
+      let baseDir;
+      
+      if (location) {
+        // Use user-specified location as the base directory
+        if (path.isAbsolute(location)) {
+          // If absolute path is provided, use it directly as base directory
+          baseDir = location;
+        } else {
+          // If relative path is provided, resolve against current working directory
+          baseDir = path.resolve(process.cwd(), location);
+        }
+        console.log(`Using user specified base location: ${baseDir}`);
+      } else {
+        // If no location provided, use current working directory as base
+        baseDir = process.cwd();
+        console.log(`No location specified, using current directory as base: ${baseDir}`);
+      }
+      
+      // Create .cursor directory in the base directory
+      const cursorDir = path.join(baseDir, '.cursor');
+      console.log(`Will create Cursor Rules at: ${cursorDir}`);
+      
+      // Ensure parent directory exists if needed
+      const parentDir = path.dirname(cursorDir);
+      try {
+        await fs.ensureDir(parentDir);
+        console.log(`Ensured parent directory exists: ${parentDir}`);
+      } catch (error) {
+        console.error(`Error ensuring parent directory: ${error}`);
+        throw new Error(`Cannot create or access parent directory: ${error}`);
+      }
+      
+      // Ensure .cursor directory exists
+      try {
+        await fs.ensureDir(cursorDir);
+        console.log(`Created .cursor directory: ${cursorDir}`);
+      } catch (error) {
+        console.error(`Error creating .cursor directory: ${error}`);
+        throw new Error(`Cannot create .cursor directory: ${error}`);
+      }
+      
+      // Create the cursor-rules.mdc file
+      const cursorRulesPath = path.join(cursorDir, 'cursor-rules.mdc');
+      console.log(`Will create cursor-rules.mdc at: ${cursorRulesPath}`);
+      
+      // Generate content for the rules file based on project purpose
+      console.log(`Generating cursor rules content for purpose: ${projectPurpose}`);
+      try {
+        const cursorRulesContent = await generateCursorRules(projectPurpose);
+        
+        // Save the file
+        try {
+          await fs.writeFile(cursorRulesPath, cursorRulesContent, 'utf-8');
+          console.log(`Created cursor-rules.mdc at: ${cursorRulesPath}`);
+        } catch (error) {
+          console.error(`Error creating cursor-rules.mdc file: ${error}`);
+          throw new Error(`Cannot create cursor-rules.mdc file: ${error}`);
+        }
+        
+        return {
+          content: [{ 
+            type: 'text', 
+            text: `✅ Cursor Rules successfully created!\n\nLocation: ${cursorRulesPath}` 
+          }]
+        };
+      } catch (ruleGenError) {
+        console.error(`Error generating cursor rules content: ${ruleGenError}`);
+        
+        // Detaylı hata mesajı oluştur
+        let errorMessage = 'Error generating Cursor Rules content: ';
+        if (ruleGenError instanceof Error) {
+          errorMessage += ruleGenError.message;
+          
+          // API key ile ilgili hata mesajlarını daha açıklayıcı hale getir
+          if (ruleGenError.message.includes('GEMINI_API_KEY') || ruleGenError.message.includes('API key')) {
+            errorMessage += '\n\nÖnemli: Bu özellik Gemini API kullanıyor. Lütfen .env dosyasında geçerli bir GEMINI_API_KEY tanımladığınızdan emin olun.';
+          }
+        } else {
+          errorMessage += String(ruleGenError);
+        }
+        
+        throw new Error(errorMessage);
+      }
+    } catch (error) {
+      console.error('Error creating Cursor Rules:', error);
       return {
         content: [{ type: 'text', text: `❌ Error: ${error instanceof Error ? error.message : String(error)}` }],
         isError: true
