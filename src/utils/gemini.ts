@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import fs from 'fs-extra';
 import path from 'path';
 
-const DEFAULT_API_KEY = 'AIzaSyBCwxeNGM9Jwnl4C5iqfgZtlsd4RcFanWE';
+const DEFAULT_API_KEY = 'YOURGEMINIAPIKEYHERE';
 
 let apiKey = DEFAULT_API_KEY;
 
